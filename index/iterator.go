@@ -8,4 +8,5 @@ type Iterator interface {
 	Key() []byte
 	Value() *Index
 	Close()
+	Size() int
 }

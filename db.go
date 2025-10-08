@@ -168,6 +168,10 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		return nil, ErrKeyNotFound
 	}
 
+	return db.readEntryValueByIndex(indexOfEntry)
+}
+
+func (db *DB) readEntryValueByIndex(indexOfEntry *index.Index) ([]byte, error) {
 	var dataFile *data.File
 	// find the data file
 	if indexOfEntry.FileID == db.activeFile.ID {
@@ -185,7 +189,6 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return entry.Value, nil
 }
 
@@ -266,6 +269,56 @@ func (db *DB) setupActiveFile() error {
 		return err
 	}
 	db.activeFile = dataFile
+
+	return nil
+}
+
+func (db *DB) ListKeys() [][]byte {
+	it := db.indexer.Iterator(false)
+	keys := make([][]byte, it.Size())
+	it.Rewind()
+	for i := 0; it.Valid(); it.Next() {
+		keys[i] = it.Key()
+		i++
+	}
+	return keys
+}
+
+func (db *DB) Fold(f func(key []byte, value []byte) bool) {
+	it := db.indexer.Iterator(false)
+	it.Rewind()
+	for ; it.Valid(); it.Next() {
+		key := it.Key()
+		value, err := db.Get(key)
+		if err != nil {
+			continue
+		}
+		if !f(key, value) {
+			break
+		}
+	}
+}
+
+func (db *DB) Close() error {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
+
+	if db.activeFile == nil {
+		return nil
+	}
+
+	// close active file
+
+	if err := db.activeFile.Close(); err != nil {
+		return err
+	}
+
+	// close old files
+	for _, file := range db.oldFiles {
+		if err := file.Close(); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

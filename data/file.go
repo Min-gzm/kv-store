@@ -74,5 +74,7 @@ func (f *File) Sync() error {
 }
 
 func (f *File) Close() error {
+	// sync before close
+	_ = f.ioManager.Sync()
 	return f.ioManager.Close()
 }

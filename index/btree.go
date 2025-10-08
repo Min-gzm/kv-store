@@ -130,3 +130,7 @@ func (bti *bTreeIterator) Value() *Index {
 func (bti *bTreeIterator) Close() {
 	bti.values = nil
 }
+
+func (bti *bTreeIterator) Size() int {
+	return len(bti.values)
+}
