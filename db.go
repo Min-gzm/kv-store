@@ -191,6 +191,34 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	return entry.Value, nil
 }
 
+func (db *DB) Delete(key []byte) error {
+	if len(key) == 0 {
+		return ErrKeyIsEmpty
+	}
+
+	// check if key exists
+	existingIndex := db.indexer.Get(key)
+	if existingIndex == nil {
+		return ErrKeyNotFound
+	}
+
+	// create a delete entry
+	entry := &data.Entry{
+		Key:   key,
+		Value: []byte{},
+		Type:  data.EntryDeleted,
+	}
+	_, err := db.appendEntry(entry)
+	if err != nil {
+		return err
+	}
+
+	if ok := db.indexer.Delete(key); !ok {
+		return ErrIndexUpdateFailed
+	}
+	return nil
+}
+
 func (db *DB) appendEntry(entry *data.Entry) (*index.Index, error) {
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
