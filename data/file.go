@@ -44,30 +44,19 @@ func (f *File) Read(offset int64) (*Entry, int, error) {
 	if header == nil {
 		return nil, 0, io.EOF
 	}
-	// read the end of the file
+	// reach the end of the file
 	if header.CRC == 0 && header.KeySize == 0 && header.ValueSize == 0 {
 		return nil, 0, io.EOF
 	}
 
 	entrySize := uint32(headerSize) + header.KeySize + header.ValueSize
-
-	// read key and value based on the header info
-	keyAndValueBuffer, err := f.readNBytes(int(header.KeySize+header.ValueSize), offset+int64(headerSize))
+	entryBuffer := make([]byte, entrySize)
+	_, err = f.IOManager.Read(entryBuffer, offset)
 	if err != nil {
 		return nil, 0, err
 	}
+	entry, err := DecodeEntry(entryBuffer)
 
-	// build the entry
-	entry := &Entry{
-		Type:  header.Type,
-		Key:   keyAndValueBuffer[:header.KeySize],
-		Value: keyAndValueBuffer[header.KeySize:],
-	}
-
-	// verify the crc
-	if !verifyHeaderCRC(header, headerBuffer[:headerSize]) {
-		return nil, 0, ErrInvalidCRC
-	}
 	return entry, int(entrySize), nil
 }
 
