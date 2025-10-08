@@ -1,13 +1,11 @@
 package kv_store
 
 import (
-	"fmt"
 	"github.com/google/uuid"
 	"io"
 	"kv_store/config"
 	"kv_store/data"
 	"kv_store/index"
-	myio "kv_store/io"
 	"os"
 	"sort"
 	"strings"
@@ -42,7 +40,7 @@ func (db *DB) Start(config config.DBConfig) (*DB, error) {
 		config:   config,
 		mutex:    new(sync.RWMutex),
 		oldFiles: make(map[string]*data.File),
-		indexer:  index.NewBTree(2),
+		indexer:  index.NewBTreeIndexer(2),
 	}
 
 	// Load existing data files
@@ -263,15 +261,9 @@ func (db *DB) appendEntry(entry *data.Entry) (*index.Index, error) {
 
 func (db *DB) setupActiveFile() error {
 	fileID := uuid.New().String()
-	fileName := fmt.Sprintf("%s/%s%s", db.config.DataDirPath, fileID, data.FileSuffix)
-	fileManager, err := myio.NewIOManager(fileName)
+	dataFile, err := data.NewFile(db.config.DataDirPath, fileID)
 	if err != nil {
 		return err
-	}
-	dataFile := &data.File{
-		ID:          fileID,
-		WriteOffset: 0,
-		IOManager:   fileManager,
 	}
 	db.activeFile = dataFile
 

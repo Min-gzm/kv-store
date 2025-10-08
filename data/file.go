@@ -12,7 +12,7 @@ const (
 type File struct {
 	ID          string
 	WriteOffset int64
-	IOManager   myio.Manager
+	ioManager   myio.Manager
 }
 
 func NewFile(dir, id string) (*File, error) {
@@ -23,13 +23,13 @@ func NewFile(dir, id string) (*File, error) {
 	return &File{
 		ID:          id,
 		WriteOffset: 0,
-		IOManager:   manager,
+		ioManager:   manager,
 	}, nil
 }
 
 func (f *File) readNBytes(n int, offset int64) ([]byte, error) {
 	buffer := make([]byte, n)
-	_, err := f.IOManager.Read(buffer, offset)
+	_, err := f.ioManager.Read(buffer, offset)
 	return buffer, err
 }
 
@@ -51,7 +51,7 @@ func (f *File) Read(offset int64) (*Entry, int, error) {
 
 	entrySize := uint32(headerSize) + header.KeySize + header.ValueSize
 	entryBuffer := make([]byte, entrySize)
-	_, err = f.IOManager.Read(entryBuffer, offset)
+	_, err = f.ioManager.Read(entryBuffer, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -61,7 +61,7 @@ func (f *File) Read(offset int64) (*Entry, int, error) {
 }
 
 func (f *File) Write(b []byte) error {
-	size, err := f.IOManager.Write(b)
+	size, err := f.ioManager.Write(b)
 	if err != nil {
 		return err
 	}
@@ -70,9 +70,9 @@ func (f *File) Write(b []byte) error {
 }
 
 func (f *File) Sync() error {
-	return f.IOManager.Sync()
+	return f.ioManager.Sync()
 }
 
 func (f *File) Close() error {
-	return f.IOManager.Close()
+	return f.ioManager.Close()
 }
