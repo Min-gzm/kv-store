@@ -67,12 +67,12 @@ func (db *DB) loadDataFiles() error {
 	var files []fileWithTime
 	// filter .data files and get their modification times for sorting
 	for _, entry := range dir {
-		if !entry.IsDir() && len(entry.Name()) > 5 && entry.Name()[len(entry.Name())-5:] == ".data" {
+		if !entry.IsDir() && len(entry.Name()) > 5 && entry.Name()[len(entry.Name())-5:] == data.FileSuffix {
 			info, err := entry.Info()
 			if err != nil {
 				continue
 			}
-			fileID := strings.TrimSuffix(entry.Name(), ".data")
+			fileID := strings.TrimSuffix(entry.Name(), data.FileSuffix)
 			files = append(files, fileWithTime{
 				ID:      fileID,
 				ModTime: info.ModTime(),
@@ -87,7 +87,7 @@ func (db *DB) loadDataFiles() error {
 
 	// load data files from oldest to newest
 	for i := 0; i < len(files); i++ {
-		dataFile, err := data.NewFile(files[i].ID)
+		dataFile, err := data.NewFile(db.config.DataDirPath, files[i].ID)
 		if err != nil {
 			continue
 		}
@@ -263,8 +263,8 @@ func (db *DB) appendEntry(entry *data.Entry) (*index.Index, error) {
 
 func (db *DB) setupActiveFile() error {
 	fileID := uuid.New().String()
-	fileName := fmt.Sprintf("%s/%s.data", db.config.DataDirPath, fileID)
-	fileManager, err := myio.NewFileManager(fileName)
+	fileName := fmt.Sprintf("%s/%s%s", db.config.DataDirPath, fileID, data.FileSuffix)
+	fileManager, err := myio.NewIOManager(fileName)
 	if err != nil {
 		return err
 	}

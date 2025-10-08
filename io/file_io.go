@@ -3,11 +3,11 @@ package io
 import "os"
 
 type FileManager struct {
-	file *os.File
+	fd *os.File
 }
 
 func NewFileManager(filename string) (*FileManager, error) {
-	fd, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0666)
+	fd, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		return nil, err
 	}
@@ -15,17 +15,17 @@ func NewFileManager(filename string) (*FileManager, error) {
 }
 
 func (fm *FileManager) Read(buffer []byte, offset int64) (int, error) {
-	return fm.file.ReadAt(buffer, offset)
+	return fm.fd.ReadAt(buffer, offset)
 }
 
 func (fm *FileManager) Write(content []byte) (int, error) {
-	return fm.file.Write(content)
+	return fm.fd.Write(content)
 }
 
 func (fm *FileManager) Sync() error {
-	return fm.file.Sync()
+	return fm.fd.Sync()
 }
 
 func (fm *FileManager) Close() error {
-	return fm.file.Close()
+	return fm.fd.Close()
 }

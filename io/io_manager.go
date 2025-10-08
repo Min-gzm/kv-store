@@ -6,3 +6,7 @@ type Manager interface {
 	Sync() error
 	Close() error
 }
+
+func NewIOManager(filename string) (Manager, error) {
+	return NewFileManager(filename)
+}
