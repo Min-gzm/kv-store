@@ -1,8 +1,9 @@
-package kv_store
+package user
 
 import (
 	"github.com/google/uuid"
 	"io"
+	"kv_store"
 	"kv_store/config"
 	"kv_store/data"
 	"kv_store/index"
@@ -23,11 +24,11 @@ type DB struct {
 
 func (db *DB) Start(config config.DBConfig) (*DB, error) {
 	if config.DataDirPath == "" {
-		return nil, ErrDataDirPathNotSet
+		return nil, kv_store.ErrDataDirPathNotSet
 	}
 
 	if config.DataFileSize <= 0 {
-		return nil, ErrInvalidDataFileSize
+		return nil, kv_store.ErrInvalidDataFileSize
 	}
 
 	// check if data directory exists, if not create it
@@ -133,7 +134,7 @@ func (db *DB) loadDataFiles() error {
 
 func (db *DB) Put(key []byte, value []byte) error {
 	if len(key) == 0 {
-		return ErrKeyIsEmpty
+		return kv_store.ErrKeyIsEmpty
 	}
 
 	entry := &data.Entry{
@@ -148,7 +149,7 @@ func (db *DB) Put(key []byte, value []byte) error {
 	}
 
 	if ok := db.indexer.Put(key, indexOfEntry); !ok {
-		return ErrIndexUpdateFailed
+		return kv_store.ErrIndexUpdateFailed
 	}
 
 	return nil
@@ -159,13 +160,13 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	defer db.mutex.RUnlock()
 
 	if len(key) == 0 {
-		return nil, ErrKeyIsEmpty
+		return nil, kv_store.ErrKeyIsEmpty
 	}
 
 	// get index
 	indexOfEntry := db.indexer.Get(key)
 	if indexOfEntry == nil {
-		return nil, ErrKeyNotFound
+		return nil, kv_store.ErrKeyNotFound
 	}
 
 	return db.readEntryValueByIndex(indexOfEntry)
@@ -181,7 +182,7 @@ func (db *DB) readEntryValueByIndex(indexOfEntry *index.Index) ([]byte, error) {
 	}
 
 	if dataFile == nil {
-		return nil, ErrFileNotFound
+		return nil, kv_store.ErrFileNotFound
 	}
 
 	// read data from data file
@@ -194,13 +195,13 @@ func (db *DB) readEntryValueByIndex(indexOfEntry *index.Index) ([]byte, error) {
 
 func (db *DB) Delete(key []byte) error {
 	if len(key) == 0 {
-		return ErrKeyIsEmpty
+		return kv_store.ErrKeyIsEmpty
 	}
 
 	// check if key exists
 	existingIndex := db.indexer.Get(key)
 	if existingIndex == nil {
-		return ErrKeyNotFound
+		return kv_store.ErrKeyNotFound
 	}
 
 	// create a delete entry
@@ -215,7 +216,7 @@ func (db *DB) Delete(key []byte) error {
 	}
 
 	if ok := db.indexer.Delete(key); !ok {
-		return ErrIndexUpdateFailed
+		return kv_store.ErrIndexUpdateFailed
 	}
 	return nil
 }

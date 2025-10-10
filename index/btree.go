@@ -3,6 +3,7 @@ package index
 import (
 	"bytes"
 	"github.com/google/btree"
+	"kv_store/iterator"
 	"sort"
 	"sync"
 )
@@ -61,7 +62,7 @@ func (bt *bTree) Delete(key []byte) bool {
 	return oldItem != nil
 }
 
-func (bt *bTree) Iterator(reverse bool) Iterator {
+func (bt *bTree) Iterator(reverse bool) iterator.Iterator[*Index] {
 	it := newBTreeIterator(bt.tree, reverse)
 	return it
 }
@@ -73,7 +74,7 @@ type bTreeIterator struct {
 }
 
 func newBTreeIterator(bt *btree.BTree, reverse bool) *bTreeIterator {
-	iterator := &bTreeIterator{
+	bTreeIterator := &bTreeIterator{
 		currentIndex: 0,
 		reverse:      reverse,
 		values:       make([]*Item, bt.Len()),
@@ -81,7 +82,7 @@ func newBTreeIterator(bt *btree.BTree, reverse bool) *bTreeIterator {
 
 	saveValues := func(item btree.Item) bool {
 		if it, ok := item.(*Item); ok {
-			iterator.values = append(iterator.values, it)
+			bTreeIterator.values = append(bTreeIterator.values, it)
 		}
 		return true
 	}
@@ -91,7 +92,7 @@ func newBTreeIterator(bt *btree.BTree, reverse bool) *bTreeIterator {
 		bt.Ascend(saveValues)
 	}
 
-	return iterator
+	return bTreeIterator
 }
 
 func (bti *bTreeIterator) Rewind() {

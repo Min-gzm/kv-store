@@ -1,12 +1,13 @@
-package kv_store
+package user
 
 import (
 	"kv_store/config"
 	"kv_store/index"
+	"kv_store/iterator"
 )
 
 type Iterator struct {
-	indexerIterator index.Iterator
+	indexerIterator iterator.Iterator[*index.Index]
 	db              *DB
 	config          *config.IteratorConfig
 }

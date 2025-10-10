@@ -1,12 +1,12 @@
-package index
+package iterator
 
-type Iterator interface {
+type Iterator[T interface{}] interface {
 	Rewind()
 	Seek(key []byte)
 	Next()
 	Valid() bool
 	Key() []byte
-	Value() *Index
+	Value() T
 	Close()
 	Size() int
 }
