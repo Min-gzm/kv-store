@@ -104,7 +104,7 @@ func (t *MutexTransaction) Commit() error {
 	// append a finished entry to indicate the transaction is complete
 	finishedEntry := &data.Entry{
 		Key:  []byte(txnFinishedKey),
-		Type: data.EntryNormal,
+		Type: data.EntryTxFinished,
 		Seq:  seqNum,
 	}
 	_, err := t.db.appendEntryWithoutMutex(finishedEntry)

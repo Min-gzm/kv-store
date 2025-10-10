@@ -1,7 +1,6 @@
 package user
 
 import (
-	"bytes"
 	"github.com/google/uuid"
 	"io"
 	"kv_store"
@@ -137,7 +136,7 @@ func (db *DB) loadDataFiles() error {
 			if entry.Seq == nonTxnSeq { // non-transactional entry
 				updateIndex(entry, indexOfEntry)
 			} else {
-				if bytes.Equal(entry.Key, []byte(txnFinishedKey)) {
+				if entry.Type == data.EntryTxFinished {
 					for _, ewi := range entryWithIndexes[entry.Seq] {
 						updateIndex(ewi.entry, ewi.index)
 					}

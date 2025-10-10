@@ -10,7 +10,7 @@ type EntryType = byte
 const (
 	EntryNormal EntryType = iota
 	EntryDeleted
-	EntryFinished
+	EntryTxFinished
 )
 
 type Entry struct {
