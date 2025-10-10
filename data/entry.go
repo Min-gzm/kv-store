@@ -10,12 +10,14 @@ type EntryType = byte
 const (
 	EntryNormal EntryType = iota
 	EntryDeleted
+	EntryFinished
 )
 
 type Entry struct {
 	Key   []byte
 	Value []byte
 	Type  EntryType
+	Seq   uint64
 }
 
 type EntryHeader struct {

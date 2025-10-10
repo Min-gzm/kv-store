@@ -1,6 +1,7 @@
 package user
 
 import (
+	"bytes"
 	"github.com/google/uuid"
 	"io"
 	"kv_store"
@@ -20,6 +21,7 @@ type DB struct {
 	activeFile *data.File
 	oldFiles   map[string]*data.File
 	indexer    index.Indexer
+	seqNum     uint64 // start from 1 and increment for each transaction
 }
 
 func (db *DB) Start(config config.DBConfig) (*DB, error) {
@@ -84,6 +86,24 @@ func (db *DB) loadDataFiles() error {
 		return files[i].ModTime.Before(files[j].ModTime)
 	})
 
+	updateIndex := func(entry *data.Entry, indexOfEntry *index.Index) {
+		var ok bool
+		if entry.Type == data.EntryNormal {
+			ok = db.indexer.Put(entry.Key, indexOfEntry)
+		} else if entry.Type == data.EntryDeleted {
+			ok = db.indexer.Delete(entry.Key)
+		}
+		if !ok {
+			panic("failed to update index during loading")
+		}
+	}
+
+	type entryWithIndex struct {
+		entry *data.Entry
+		index *index.Index
+	}
+	entryWithIndexes := make(map[uint64][]*entryWithIndex)
+	var currentSeq = uint64(0)
 	// load data files from oldest to newest
 	for i := 0; i < len(files); i++ {
 		dataFile, err := data.NewFile(db.config.DataDirPath, files[i].ID)
@@ -91,6 +111,7 @@ func (db *DB) loadDataFiles() error {
 			continue
 		}
 
+		// set up the active and old files
 		if i == len(files)-1 {
 			db.activeFile = dataFile
 		} else {
@@ -113,15 +134,30 @@ func (db *DB) loadDataFiles() error {
 				Offset: offset,
 				Size:   size,
 			}
-
-			if entry.Type == data.EntryNormal {
-				db.indexer.Put(entry.Key, indexOfEntry)
-			} else if entry.Type == data.EntryDeleted {
-				db.indexer.Delete(entry.Key)
+			if entry.Seq == nonTxnSeq { // non-transactional entry
+				updateIndex(entry, indexOfEntry)
+			} else {
+				if bytes.Equal(entry.Key, []byte(txnFinishedKey)) {
+					for _, ewi := range entryWithIndexes[entry.Seq] {
+						updateIndex(ewi.entry, ewi.index)
+					}
+					delete(entryWithIndexes, entry.Seq)
+				} else {
+					entryWithIndexes[entry.Seq] = append(entryWithIndexes[entry.Seq], &entryWithIndex{
+						entry: entry,
+						index: indexOfEntry,
+					})
+				}
+			}
+			if entry.Seq > currentSeq {
+				currentSeq = entry.Seq
 			}
 
 			offset += int64(size)
 		}
+
+		// update the seq number in the db
+		db.seqNum = currentSeq
 
 		// set the write offset for the current active file
 		if i == len(files)-1 {
@@ -141,6 +177,7 @@ func (db *DB) Put(key []byte, value []byte) error {
 		Key:   key,
 		Value: value,
 		Type:  data.EntryNormal,
+		Seq:   nonTxnSeq,
 	}
 
 	indexOfEntry, err := db.appendEntry(entry)
@@ -209,6 +246,7 @@ func (db *DB) Delete(key []byte) error {
 		Key:   key,
 		Value: []byte{},
 		Type:  data.EntryDeleted,
+		Seq:   nonTxnSeq,
 	}
 	_, err := db.appendEntry(entry)
 	if err != nil {
@@ -221,10 +259,7 @@ func (db *DB) Delete(key []byte) error {
 	return nil
 }
 
-func (db *DB) appendEntry(entry *data.Entry) (*index.Index, error) {
-	db.mutex.Lock()
-	defer db.mutex.Unlock()
-
+func (db *DB) appendEntryWithoutMutex(entry *data.Entry) (*index.Index, error) {
 	// check if the active file exists
 	if db.activeFile == nil {
 		if err := db.setupActiveFile(); err != nil {
@@ -261,6 +296,12 @@ func (db *DB) appendEntry(entry *data.Entry) (*index.Index, error) {
 	}
 
 	return indexOfEntry, nil
+}
+
+func (db *DB) appendEntry(entry *data.Entry) (*index.Index, error) {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
+	return db.appendEntryWithoutMutex(entry)
 }
 
 func (db *DB) setupActiveFile() error {
