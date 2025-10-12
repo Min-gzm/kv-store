@@ -2,21 +2,38 @@ package data
 
 import (
 	"io"
+	"kv_store/index"
 	myio "kv_store/io"
+	"kv_store/transaction"
+	"path/filepath"
+	"time"
 )
 
 const (
-	FileSuffix = ".data"
+	FileSuffix            = ".data"
+	HintFileName          = "hint.h"
+	MergeFinishedFileName = "merge_finished"
 )
 
 type File struct {
 	ID          string
 	WriteOffset int64
 	ioManager   myio.Manager
+	Timestamp   int64
 }
 
-func NewFile(dir, id string) (*File, error) {
-	manager, err := myio.NewFileManager(dir + "/" + id + FileSuffix)
+func NewDataFile(dir, id string) (*File, error) {
+	path := filepath.Join(dir, id+FileSuffix)
+	return newFile(id, path, time.Now().UnixMilli())
+}
+
+func LoadDataFile(dir, id string, timestamp int64) (*File, error) {
+	path := filepath.Join(dir, id+FileSuffix)
+	return newFile(id, path, timestamp)
+}
+
+func newFile(id, path string, timestamp int64) (*File, error) {
+	manager, err := myio.NewFileManager(path)
 	if err != nil {
 		return nil, err
 	}
@@ -24,7 +41,18 @@ func NewFile(dir, id string) (*File, error) {
 		ID:          id,
 		WriteOffset: 0,
 		ioManager:   manager,
+		Timestamp:   timestamp,
 	}, nil
+}
+
+func NewHintFile(dir string) (*File, error) {
+	path := filepath.Join(dir, HintFileName)
+	return newFile(HintFileName, path, time.Now().UnixMilli())
+}
+
+func NewMergeFinishedFile(dir string) (*File, error) {
+	path := filepath.Join(dir, MergeFinishedFileName)
+	return newFile(MergeFinishedFileName, path, time.Now().UnixMilli())
 }
 
 func (f *File) readNBytes(n int, offset int64) ([]byte, error) {
@@ -66,6 +94,21 @@ func (f *File) Write(b []byte) error {
 		return err
 	}
 	f.WriteOffset += int64(size)
+	return nil
+}
+
+func (f *File) WriteHintFile(key []byte, i *index.Index) error {
+	encodedIndex := index.EncodeIndex(i)
+	entry := &Entry{
+		Key:   key,
+		Value: encodedIndex,
+		Type:  EntryNormal,
+		Seq:   transaction.NonTxnSeq,
+	}
+	encodedEntry, _ := EncodeEntry(entry)
+	if err := f.Write(encodedEntry); err != nil {
+		return err
+	}
 	return nil
 }
 

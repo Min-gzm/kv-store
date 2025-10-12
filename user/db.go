@@ -7,11 +7,12 @@ import (
 	"kv_store/config"
 	"kv_store/data"
 	"kv_store/index"
+	"kv_store/transaction"
 	"os"
+	"path"
 	"sort"
 	"strings"
 	"sync"
-	"time"
 )
 
 type DB struct {
@@ -21,9 +22,10 @@ type DB struct {
 	oldFiles   map[string]*data.File
 	indexer    index.Indexer
 	seqNum     uint64 // start from 1 and increment for each transaction
+	isMerging  bool
 }
 
-func (db *DB) Start(config config.DBConfig) (*DB, error) {
+func OpenDB(config config.DBConfig) (*DB, error) {
 	if config.DataDirPath == "" {
 		return nil, kv_store.ErrDataDirPathNotSet
 	}
@@ -45,26 +47,31 @@ func (db *DB) Start(config config.DBConfig) (*DB, error) {
 		indexer:  index.NewBTreeIndexer(2),
 	}
 
+	// load merged files
+	if err := instance.loadMergeFiles(); err != nil {
+		return nil, err
+	}
+
+	// load hint file
+	if err := instance.loadIndexesFromHintFile(); err != nil {
+		return nil, err
+	}
+
 	// Load existing data files
-	if err := db.loadDataFiles(); err != nil {
+	if err := instance.loadDataFiles(); err != nil {
 		return nil, err
 	}
 
 	return instance, nil
 }
 
-type fileWithTime struct {
-	ID      string
-	ModTime time.Time
-}
-
-func (db *DB) loadDataFiles() error {
+func (db *DB) getAllDataFiles() ([]*data.File, error) {
+	var files []*data.File
 	dir, err := os.ReadDir(db.config.DataDirPath)
 	if err != nil {
-		return err
+		return files, err
 	}
 
-	var files []fileWithTime
 	// filter .data files and get their modification times for sorting
 	for _, entry := range dir {
 		if !entry.IsDir() && len(entry.Name()) > 5 && entry.Name()[len(entry.Name())-5:] == data.FileSuffix {
@@ -73,17 +80,48 @@ func (db *DB) loadDataFiles() error {
 				continue
 			}
 			fileID := strings.TrimSuffix(entry.Name(), data.FileSuffix)
-			files = append(files, fileWithTime{
-				ID:      fileID,
-				ModTime: info.ModTime(),
-			})
+			dataFile, err := data.LoadDataFile(db.config.DataDirPath, fileID, info.ModTime().Unix())
+
+			files = append(files, dataFile)
 		}
 	}
 
 	// Sort files by modification time, oldest first
 	sort.Slice(files, func(i, j int) bool {
-		return files[i].ModTime.Before(files[j].ModTime)
+		return files[i].Timestamp < files[j].Timestamp
 	})
+
+	return files, nil
+}
+
+func (db *DB) loadDataFiles() error {
+	files, err := db.getAllDataFiles()
+	if err != nil {
+		return err
+	}
+
+	hasMerged := false
+	firstNonMergedFileID := ""
+	// check if there is a merge finished file
+	mergeFinishedFilePath := path.Join(db.config.DataDirPath, data.MergeFinishedFileName)
+	if _, err := os.Stat(mergeFinishedFilePath); err == nil {
+		firstNonMergedFileID, err = db.getFirstNonMergedFileID(db.config.DataDirPath)
+		if err != nil {
+			return err
+		}
+		hasMerged = true
+	}
+
+	// remove the merged files
+	// because their indexes are loaded in the hint file
+	if hasMerged {
+		for i, file := range files {
+			if file.ID == firstNonMergedFileID {
+				files = files[i:]
+				break
+			}
+		}
+	}
 
 	updateIndex := func(entry *data.Entry, indexOfEntry *index.Index) {
 		var ok bool
@@ -104,17 +142,12 @@ func (db *DB) loadDataFiles() error {
 	entryWithIndexes := make(map[uint64][]*entryWithIndex)
 	var currentSeq = uint64(0)
 	// load data files from oldest to newest
-	for i := 0; i < len(files); i++ {
-		dataFile, err := data.NewFile(db.config.DataDirPath, files[i].ID)
-		if err != nil {
-			continue
-		}
-
+	for i, dataFile := range files {
 		// set up the active and old files
 		if i == len(files)-1 {
 			db.activeFile = dataFile
 		} else {
-			db.oldFiles[files[i].ID] = dataFile
+			db.oldFiles[dataFile.ID] = dataFile
 		}
 
 		// load index from data file
@@ -133,7 +166,7 @@ func (db *DB) loadDataFiles() error {
 				Offset: offset,
 				Size:   size,
 			}
-			if entry.Seq == nonTxnSeq { // non-transactional entry
+			if entry.Seq == transaction.NonTxnSeq { // non-transactional entry
 				updateIndex(entry, indexOfEntry)
 			} else {
 				if entry.Type == data.EntryTxFinished {
@@ -176,7 +209,7 @@ func (db *DB) Put(key []byte, value []byte) error {
 		Key:   key,
 		Value: value,
 		Type:  data.EntryNormal,
-		Seq:   nonTxnSeq,
+		Seq:   transaction.NonTxnSeq,
 	}
 
 	indexOfEntry, err := db.appendEntry(entry)
@@ -245,7 +278,7 @@ func (db *DB) Delete(key []byte) error {
 		Key:   key,
 		Value: []byte{},
 		Type:  data.EntryDeleted,
-		Seq:   nonTxnSeq,
+		Seq:   transaction.NonTxnSeq,
 	}
 	_, err := db.appendEntry(entry)
 	if err != nil {
@@ -305,7 +338,7 @@ func (db *DB) appendEntry(entry *data.Entry) (*index.Index, error) {
 
 func (db *DB) setupActiveFile() error {
 	fileID := uuid.New().String()
-	dataFile, err := data.NewFile(db.config.DataDirPath, fileID)
+	dataFile, err := data.NewDataFile(db.config.DataDirPath, fileID)
 	if err != nil {
 		return err
 	}
@@ -340,6 +373,10 @@ func (db *DB) Fold(f func(key []byte, value []byte) bool) {
 	}
 }
 
+func (db *DB) Sync() error {
+	return db.activeFile.Sync()
+}
+
 func (db *DB) Close() error {
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
@@ -348,8 +385,11 @@ func (db *DB) Close() error {
 		return nil
 	}
 
-	// close active file
+	if err := db.Sync(); err != nil {
+		return err
+	}
 
+	// close active file
 	if err := db.activeFile.Close(); err != nil {
 		return err
 	}

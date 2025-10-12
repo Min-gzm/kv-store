@@ -5,13 +5,9 @@ import (
 	"kv_store/config"
 	"kv_store/data"
 	"kv_store/index"
+	"kv_store/transaction"
 	"sync"
 	"sync/atomic"
-)
-
-const (
-	txnFinishedKey = "txn_finished"
-	nonTxnSeq      = 0
 )
 
 type MutexTransaction struct {
@@ -103,7 +99,7 @@ func (t *MutexTransaction) Commit() error {
 
 	// append a finished entry to indicate the transaction is complete
 	finishedEntry := &data.Entry{
-		Key:  []byte(txnFinishedKey),
+		Key:  []byte(transaction.TxnFinishedKey),
 		Type: data.EntryTxFinished,
 		Seq:  seqNum,
 	}
