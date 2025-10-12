@@ -23,14 +23,15 @@ const (
 )
 
 type DB struct {
-	config     config.DBConfig
-	mutex      *sync.RWMutex
-	activeFile *data.File
-	oldFiles   map[string]*data.File
-	indexer    index.Indexer
-	seqNum     uint64 // start from 1 and increment for each transaction
-	isMerging  bool
-	fileLock   *flock.Flock
+	config       config.DBConfig
+	mutex        *sync.RWMutex
+	activeFile   *data.File
+	oldFiles     map[string]*data.File
+	indexer      index.Indexer
+	seqNum       uint64 // start from 1 and increment for each transaction
+	isMerging    bool
+	fileLock     *flock.Flock
+	writtenBytes int64
 }
 
 func OpenDB(config config.DBConfig) (*DB, error) {
@@ -56,11 +57,12 @@ func OpenDB(config config.DBConfig) (*DB, error) {
 
 	// Create DB instance
 	instance := &DB{
-		config:   config,
-		mutex:    new(sync.RWMutex),
-		oldFiles: make(map[string]*data.File),
-		indexer:  index.NewBTreeIndexer(2),
-		fileLock: fileLock,
+		config:       config,
+		mutex:        new(sync.RWMutex),
+		oldFiles:     make(map[string]*data.File),
+		indexer:      index.NewBTreeIndexer(2),
+		fileLock:     fileLock,
+		writtenBytes: 0,
 	}
 
 	// load merged files
@@ -341,19 +343,31 @@ func (db *DB) appendEntryWithoutMutex(entry *data.Entry) (*index.Index, error) {
 	}
 
 	encodedEntry, size := data.EncodeEntry(entry)
+	// create a new active file
 	if db.activeFile.WriteOffset+int64(size) > db.config.DataFileSize {
 		if err := db.activeFile.Sync(); err != nil {
 			return nil, err
 		}
+
+		// update the writtenBytes
+		db.writtenBytes = 0
+
 		db.oldFiles[db.activeFile.ID] = db.activeFile
 		if err := db.setupActiveFile(); err != nil {
 			return nil, err
 		}
 	}
-
 	if db.config.SyncAfterEveryWrites {
 		if err := db.activeFile.Sync(); err != nil {
 			return nil, err
+		}
+		db.writtenBytes = 0
+	} else {
+		db.writtenBytes += int64(size)
+		if db.writtenBytes > db.config.BytesPerSync {
+			if err := db.activeFile.Sync(); err != nil {
+				return nil, err
+			}
 		}
 	}
 
