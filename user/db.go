@@ -1,6 +1,7 @@
 package user
 
 import (
+	"github.com/gofrs/flock"
 	"github.com/google/uuid"
 	"io"
 	"kv_store"
@@ -15,6 +16,10 @@ import (
 	"sync"
 )
 
+const (
+	fileLockFileName = "file-lock.lock"
+)
+
 type DB struct {
 	config     config.DBConfig
 	mutex      *sync.RWMutex
@@ -23,6 +28,7 @@ type DB struct {
 	indexer    index.Indexer
 	seqNum     uint64 // start from 1 and increment for each transaction
 	isMerging  bool
+	fileLock   *flock.Flock
 }
 
 func OpenDB(config config.DBConfig) (*DB, error) {
@@ -39,12 +45,20 @@ func OpenDB(config config.DBConfig) (*DB, error) {
 		return nil, err
 	}
 
+	// check if other process is using the data dir
+	fileLock := flock.New(path.Join(config.DataDirPath, fileLockFileName))
+	_, err := fileLock.TryLock()
+	if err != nil {
+		return nil, kv_store.ErrDataDirIsBusy
+	}
+
 	// Create DB instance
 	instance := &DB{
 		config:   config,
 		mutex:    new(sync.RWMutex),
 		oldFiles: make(map[string]*data.File),
 		indexer:  index.NewBTreeIndexer(2),
+		fileLock: fileLock,
 	}
 
 	// load merged files
@@ -378,6 +392,14 @@ func (db *DB) Sync() error {
 }
 
 func (db *DB) Close() error {
+	defer func() {
+		// unlock the dir
+		err := db.fileLock.Unlock()
+		if err != nil {
+			panic(err)
+		}
+	}()
+
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 
