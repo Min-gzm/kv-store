@@ -17,4 +17,5 @@ var (
 	ErrMergeIsNotFinished              = errors.New("merge is not finished")
 	ErrLastNonMergedFileNotFound       = errors.New("last non merged file not found")
 	ErrDataDirIsBusy                   = errors.New("data dir is busy")
+	ErrInvalidMergeRatio               = errors.New("invalid merge ratio")
 )

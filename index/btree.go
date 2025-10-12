@@ -28,16 +28,18 @@ func newBTree(degree int) *bTree {
 	}
 }
 
-func (bt *bTree) Put(key []byte, index *Index) bool {
+func (bt *bTree) Put(key []byte, index *Index) (bool, *Index) {
 	bt.mutex.Lock()
 	defer bt.mutex.Unlock()
+
+	oldIndex := bt.Get(key)
 
 	item := &Item{
 		key:   key,
 		index: index,
 	}
 	bt.tree.ReplaceOrInsert(item)
-	return true
+	return true, oldIndex
 }
 
 func (bt *bTree) Get(key []byte) *Index {
@@ -52,14 +54,14 @@ func (bt *bTree) Get(key []byte) *Index {
 	return item.(*Item).index
 }
 
-func (bt *bTree) Delete(key []byte) bool {
+func (bt *bTree) Delete(key []byte) *Index {
 	bt.mutex.Lock()
 	defer bt.mutex.Unlock()
 
 	searchItem := &Item{key: key}
 	oldItem := bt.tree.Delete(searchItem)
 
-	return oldItem != nil
+	return oldItem.(*Item).index
 }
 
 func (bt *bTree) Iterator(reverse bool) iterator.Iterator[*Index] {

@@ -5,4 +5,5 @@ type DBConfig struct {
 	DataFileSize         int64
 	SyncAfterEveryWrites bool
 	BytesPerSync         int64
+	MergeRatio           float64
 }

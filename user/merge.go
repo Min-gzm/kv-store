@@ -6,6 +6,7 @@ import (
 	"kv_store/data"
 	"kv_store/index"
 	"kv_store/transaction"
+	"kv_store/utils"
 	"os"
 	"path"
 	"path/filepath"
@@ -24,6 +25,12 @@ func (db *DB) Merge() error {
 		return err
 	}
 	defer db.endMerge()
+
+	// check if the reclaim size reach the merge ratio
+	dataSize, err := utils.GetDirSize(db.config.DataDirPath)
+	if float64(dataSize/db.reclaimSize) < db.config.MergeRatio {
+		return nil
+	}
 
 	// read all old files from db
 	oldFiles, firstNonMergedFileID := db.getSortedOldFiles()

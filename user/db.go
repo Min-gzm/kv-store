@@ -32,6 +32,7 @@ type DB struct {
 	isMerging    bool
 	fileLock     *flock.Flock
 	writtenBytes int64
+	reclaimSize  int64
 }
 
 func OpenDB(config config.DBConfig) (*DB, error) {
@@ -41,6 +42,10 @@ func OpenDB(config config.DBConfig) (*DB, error) {
 
 	if config.DataFileSize <= 0 {
 		return nil, kv_store.ErrInvalidDataFileSize
+	}
+
+	if config.MergeRatio < 0 && config.MergeRatio > 1 {
+		return nil, kv_store.ErrInvalidMergeRatio
 	}
 
 	// check if data directory exists, if not create it
@@ -63,6 +68,7 @@ func OpenDB(config config.DBConfig) (*DB, error) {
 		indexer:      index.NewBTreeIndexer(2),
 		fileLock:     fileLock,
 		writtenBytes: 0,
+		reclaimSize:  0,
 	}
 
 	// load merged files
@@ -149,13 +155,17 @@ func (db *DB) loadDataFiles() error {
 
 	updateIndex := func(entry *data.Entry, indexOfEntry *index.Index) {
 		var ok bool
+		var oldIndex *index.Index
 		if entry.Type == data.EntryNormal {
-			ok = db.indexer.Put(entry.Key, indexOfEntry)
+			ok, oldIndex = db.indexer.Put(entry.Key, indexOfEntry)
 		} else if entry.Type == data.EntryDeleted {
-			ok = db.indexer.Delete(entry.Key)
+			oldIndex = db.indexer.Delete(entry.Key)
 		}
 		if !ok {
 			panic("failed to update index during loading")
+		}
+		if oldIndex != nil {
+			db.reclaimSize += int64(oldIndex.Size)
 		}
 	}
 
@@ -260,7 +270,7 @@ func (db *DB) Put(key []byte, value []byte) error {
 		return err
 	}
 
-	if ok := db.indexer.Put(key, indexOfEntry); !ok {
+	if ok, _ := db.indexer.Put(key, indexOfEntry); !ok {
 		return kv_store.ErrIndexUpdateFailed
 	}
 
@@ -328,9 +338,7 @@ func (db *DB) Delete(key []byte) error {
 		return err
 	}
 
-	if ok := db.indexer.Delete(key); !ok {
-		return kv_store.ErrIndexUpdateFailed
-	}
+	db.indexer.Delete(key)
 	return nil
 }
 
