@@ -134,7 +134,7 @@ func (f *File) ChangeIOType(managerType myio.FileManagerType) error {
 	if err != nil {
 		return err
 	}
-	manager, err := myio.NewIOManager(f.Filepath, myio.General)
+	manager, err := myio.NewIOManager(f.Filepath, managerType)
 	if err != nil {
 		return err
 	}

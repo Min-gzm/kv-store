@@ -206,17 +206,13 @@ func (db *DB) loadMergeFiles() error {
 
 	// replace data files in the db with data files in the merge data dir
 	// get data files in the db
-	dataFiles, err := db.getAllDataFiles()
-	if err != nil {
-		return err
-	}
-
+	originalDataFiles, err := os.ReadDir(db.config.DataDirPath)
 	// remove previous data files, remove files before the first non merged file
-	for _, dataFile := range dataFiles {
-		if dataFile.ID == firstNonMergeFileID {
+	for _, dataFile := range originalDataFiles {
+		if dataFile.Name() == firstNonMergeFileID {
 			break
 		}
-		dataFilePath := path.Join(db.config.DataDirPath, dataFile.ID)
+		dataFilePath := path.Join(db.config.DataDirPath, dataFile.Name())
 		err = os.Remove(dataFilePath)
 	}
 
