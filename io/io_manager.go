@@ -1,5 +1,12 @@
 package io
 
+type FileManagerType = int
+
+const (
+	General FileManagerType = iota
+	Mmap
+)
+
 type Manager interface {
 	Read(buffer []byte, offset int64) (int, error)
 	Write(content []byte) (int, error)
@@ -7,6 +14,10 @@ type Manager interface {
 	Close() error
 }
 
-func NewIOManager(filename string) (Manager, error) {
-	return NewFileManager(filename)
+func NewIOManager(filepath string, t FileManagerType) (Manager, error) {
+	if t == General {
+		return newFileManager(filepath)
+	} else {
+		return NewMmapFileManager(filepath)
+	}
 }

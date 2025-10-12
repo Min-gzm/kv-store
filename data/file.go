@@ -20,20 +20,21 @@ type File struct {
 	WriteOffset int64
 	ioManager   myio.Manager
 	Timestamp   int64
+	Filepath    string
 }
 
 func NewDataFile(dir, id string) (*File, error) {
 	path := filepath.Join(dir, id+FileSuffix)
-	return newFile(id, path, time.Now().UnixMilli())
+	return newFile(id, path, time.Now().UnixMilli(), myio.General)
 }
 
-func LoadDataFile(dir, id string, timestamp int64) (*File, error) {
+func LoadDataFile(dir, id string, timestamp int64, ioType myio.FileManagerType) (*File, error) {
 	path := filepath.Join(dir, id+FileSuffix)
-	return newFile(id, path, timestamp)
+	return newFile(id, path, timestamp, ioType)
 }
 
-func newFile(id, path string, timestamp int64) (*File, error) {
-	manager, err := myio.NewFileManager(path)
+func newFile(id, path string, timestamp int64, ioType myio.FileManagerType) (*File, error) {
+	manager, err := myio.NewIOManager(path, ioType)
 	if err != nil {
 		return nil, err
 	}
@@ -42,17 +43,23 @@ func newFile(id, path string, timestamp int64) (*File, error) {
 		WriteOffset: 0,
 		ioManager:   manager,
 		Timestamp:   timestamp,
+		Filepath:    path,
 	}, nil
 }
 
 func NewHintFile(dir string) (*File, error) {
 	path := filepath.Join(dir, HintFileName)
-	return newFile(HintFileName, path, time.Now().UnixMilli())
+	return newFile(HintFileName, path, time.Now().UnixMilli(), myio.General)
+}
+
+func LoadHintFile(dir string) (*File, error) {
+	path := filepath.Join(dir, HintFileName)
+	return newFile(HintFileName, path, time.Now().UnixMilli(), myio.Mmap)
 }
 
 func NewMergeFinishedFile(dir string) (*File, error) {
 	path := filepath.Join(dir, MergeFinishedFileName)
-	return newFile(MergeFinishedFileName, path, time.Now().UnixMilli())
+	return newFile(MergeFinishedFileName, path, time.Now().UnixMilli(), myio.General)
 }
 
 func (f *File) readNBytes(n int, offset int64) ([]byte, error) {
@@ -120,4 +127,17 @@ func (f *File) Close() error {
 	// sync before close
 	_ = f.ioManager.Sync()
 	return f.ioManager.Close()
+}
+
+func (f *File) ChangeIOType(managerType myio.FileManagerType) error {
+	err := f.Close()
+	if err != nil {
+		return err
+	}
+	manager, err := myio.NewIOManager(f.Filepath, myio.General)
+	if err != nil {
+		return err
+	}
+	f.ioManager = manager
+	return nil
 }

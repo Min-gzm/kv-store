@@ -264,7 +264,7 @@ func (db *DB) loadIndexesFromHintFile() error {
 		return nil
 	}
 
-	hintFile, err := data.NewHintFile(dir)
+	hintFile, err := data.LoadHintFile(dir)
 	if err != nil {
 		return err
 	}

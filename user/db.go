@@ -8,7 +8,9 @@ import (
 	"kv_store/config"
 	"kv_store/data"
 	"kv_store/index"
+	myio "kv_store/io"
 	"kv_store/transaction"
+	"log"
 	"os"
 	"path"
 	"sort"
@@ -79,7 +81,7 @@ func OpenDB(config config.DBConfig) (*DB, error) {
 	return instance, nil
 }
 
-func (db *DB) getAllDataFiles() ([]*data.File, error) {
+func (db *DB) loadAllDataFilesFromDesk(ioType myio.FileManagerType) ([]*data.File, error) {
 	var files []*data.File
 	dir, err := os.ReadDir(db.config.DataDirPath)
 	if err != nil {
@@ -94,7 +96,7 @@ func (db *DB) getAllDataFiles() ([]*data.File, error) {
 				continue
 			}
 			fileID := strings.TrimSuffix(entry.Name(), data.FileSuffix)
-			dataFile, err := data.LoadDataFile(db.config.DataDirPath, fileID, info.ModTime().Unix())
+			dataFile, err := data.LoadDataFile(db.config.DataDirPath, fileID, info.ModTime().Unix(), ioType)
 
 			files = append(files, dataFile)
 		}
@@ -109,7 +111,13 @@ func (db *DB) getAllDataFiles() ([]*data.File, error) {
 }
 
 func (db *DB) loadDataFiles() error {
-	files, err := db.getAllDataFiles()
+	files, err := db.loadAllDataFilesFromDesk(myio.Mmap)
+	defer func() {
+		err = db.resetFileType()
+		if err != nil {
+			log.Printf("Error resetting file type: %v\n", err)
+		}
+	}()
 	if err != nil {
 		return err
 	}
@@ -208,6 +216,25 @@ func (db *DB) loadDataFiles() error {
 		// set the write offset for the current active file
 		if i == len(files)-1 {
 			dataFile.WriteOffset = offset
+		}
+	}
+
+	return nil
+}
+
+func (db *DB) resetFileType() error {
+	// db is empty
+	if db.activeFile == nil {
+		return nil
+	}
+
+	if err := db.activeFile.ChangeIOType(myio.General); err != nil {
+		return err
+	}
+
+	for _, file := range db.oldFiles {
+		if err := file.ChangeIOType(myio.General); err != nil {
+			return err
 		}
 	}
 

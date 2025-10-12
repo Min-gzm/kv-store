@@ -6,8 +6,8 @@ type FileManager struct {
 	fd *os.File
 }
 
-func NewFileManager(filename string) (*FileManager, error) {
-	fd, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+func newFileManager(filepath string) (Manager, error) {
+	fd, err := os.OpenFile(filepath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		return nil, err
 	}
