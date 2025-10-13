@@ -27,8 +27,16 @@ func (db *DB) Merge() error {
 	defer db.endMerge()
 
 	// check if the reclaim size reach the merge ratio
+	// Skip merge if there's no reclaimable space
+	if db.reclaimSize == 0 {
+		return nil
+	}
 	dataSize, err := utils.GetDirSize(db.config.DataDirPath)
-	if float64(dataSize/db.reclaimSize) < db.config.MergeRatio {
+	if err != nil {
+		return err
+	}
+	// Check if the ratio of reclaimable size to total size meets the threshold
+	if float64(db.reclaimSize)/float64(dataSize) < db.config.MergeRatio {
 		return nil
 	}
 

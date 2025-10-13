@@ -270,8 +270,12 @@ func (db *DB) Put(key []byte, value []byte) error {
 		return err
 	}
 
-	if ok, _ := db.indexer.Put(key, indexOfEntry); !ok {
+	ok, oldIndex := db.indexer.Put(key, indexOfEntry)
+	if !ok {
 		return kv_store.ErrIndexUpdateFailed
+	}
+	if oldIndex != nil {
+		db.reclaimSize += int64(oldIndex.Size)
 	}
 
 	return nil
@@ -338,7 +342,10 @@ func (db *DB) Delete(key []byte) error {
 		return err
 	}
 
-	db.indexer.Delete(key)
+	oldIndex := db.indexer.Delete(key)
+	if oldIndex != nil {
+		db.reclaimSize += int64(oldIndex.Size)
+	}
 	return nil
 }
 
