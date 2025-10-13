@@ -154,7 +154,7 @@ func (db *DB) loadDataFiles() error {
 	}
 
 	updateIndex := func(entry *data.Entry, indexOfEntry *index.Index) {
-		var ok bool
+		var ok = true
 		var oldIndex *index.Index
 		if entry.Type == data.EntryNormal {
 			ok, oldIndex = db.indexer.Put(entry.Key, indexOfEntry)
