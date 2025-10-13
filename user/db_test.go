@@ -736,6 +736,9 @@ func TestDB_ListKeys(t *testing.T) {
 
 		keys := db.ListKeys()
 		assert.Len(t, keys, len(expectedKeys))
+		for index, key := range keys {
+			assert.Equal(t, expectedKeys[index], key)
+		}
 	})
 
 	t.Run("list keys excludes deleted keys", func(t *testing.T) {

@@ -79,7 +79,7 @@ func newBTreeIterator(bt *btree.BTree, reverse bool) *bTreeIterator {
 	bTreeIterator := &bTreeIterator{
 		currentIndex: 0,
 		reverse:      reverse,
-		values:       make([]*Item, bt.Len()),
+		values:       make([]*Item, 0, bt.Len()),
 	}
 
 	saveValues := func(item btree.Item) bool {
