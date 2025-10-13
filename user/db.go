@@ -297,7 +297,7 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 func (db *DB) readEntryValueByIndex(indexOfEntry *index.Index) ([]byte, error) {
 	var dataFile *data.File
 	// find the data file
-	if indexOfEntry.FileID == db.activeFile.ID {
+	if db.activeFile != nil && indexOfEntry.FileID == db.activeFile.ID {
 		dataFile = db.activeFile
 	} else {
 		dataFile = db.oldFiles[indexOfEntry.FileID]
@@ -308,7 +308,7 @@ func (db *DB) readEntryValueByIndex(indexOfEntry *index.Index) ([]byte, error) {
 	}
 
 	// read data from data file
-	entry, _, err := db.activeFile.Read(indexOfEntry.Offset)
+	entry, _, err := dataFile.Read(indexOfEntry.Offset)
 	if err != nil {
 		return nil, err
 	}
