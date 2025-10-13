@@ -51,9 +51,11 @@ func EncodeEntry(entry *Entry) ([]byte, int) {
 
 	// copy the header
 	copy(entryBuffer[:headerSize], headerBuffer[:headerSize])
+	index += headerSize
 	// copy the key and value
-	copy(entryBuffer[:index], entry.Key)
-	copy(entryBuffer[:index+len(entry.Key)], entry.Value)
+	copy(entryBuffer[index:], entry.Key)
+	index += len(entry.Key)
+	copy(entryBuffer[index:], entry.Value)
 
 	// get crc
 	crc := crc32.ChecksumIEEE(entryBuffer[4:])

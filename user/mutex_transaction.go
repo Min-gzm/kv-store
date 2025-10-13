@@ -74,7 +74,7 @@ func (t *MutexTransaction) Commit() error {
 
 	seqNum := atomic.AddUint64(&t.db.seqNum, 1)
 	indexes := make([]*index.Index, 0, len(t.pendingWrites))
-	// update the index and write entries to the data file
+	// write entries to the data file
 	for _, entry := range t.pendingWrites {
 		entryWithSeq := &data.Entry{
 			Key:   entry.Key,
@@ -87,14 +87,6 @@ func (t *MutexTransaction) Commit() error {
 			return err
 		}
 		indexes = append(indexes, indexOfEntry)
-
-		if entryWithSeq.Type == data.EntryNormal {
-			t.db.indexer.Put(entry.Key, indexOfEntry)
-		} else if entryWithSeq.Type == data.EntryDeleted {
-			t.db.indexer.Delete(entry.Key)
-		} else {
-			return kv_store.ErrInvalidEntryType
-		}
 	}
 
 	// append a finished entry to indicate the transaction is complete
@@ -118,13 +110,11 @@ func (t *MutexTransaction) Commit() error {
 	// update the indexer
 	for i, entry := range t.pendingWrites {
 		if entry.Type == data.EntryNormal {
-			if ok := t.db.indexer.Put(entry.Key, indexes[i]); !ok {
+			if ok, _ := t.db.indexer.Put(entry.Key, indexes[i]); !ok {
 				return kv_store.ErrIndexUpdateFailed
 			}
 		} else if entry.Type == data.EntryDeleted {
-			if ok := t.db.indexer.Delete(entry.Key); !ok {
-				return kv_store.ErrIndexUpdateFailed
-			}
+			t.db.indexer.Delete(entry.Key)
 		} else {
 			return kv_store.ErrInvalidEntryType
 		}
