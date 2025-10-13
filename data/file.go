@@ -71,7 +71,7 @@ func (f *File) readNBytes(n int, offset int64) ([]byte, error) {
 func (f *File) Read(offset int64) (*Entry, int, error) {
 	// read a max entry header size to get the header
 	headerBuffer, err := f.readNBytes(MaxEntryHeaderSize, offset)
-	if err != nil {
+	if err != nil && err != io.EOF {
 		return nil, 0, err
 	}
 	header, headerSize := DecodeEntryHeader(headerBuffer)

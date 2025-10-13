@@ -30,7 +30,7 @@ func (m *MmapManager) Write(content []byte) (int, error) {
 }
 
 func (m *MmapManager) Sync() error {
-	panic("not implement")
+	return nil
 }
 
 func (m *MmapManager) Close() error {
