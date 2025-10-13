@@ -42,8 +42,8 @@ func EncodeEntry(entry *Entry) ([]byte, int) {
 
 	// write key size and value size
 	index++
-	index += binary.PutVarint(headerBuffer[index:], int64(len(entry.Key)))
-	index += binary.PutVarint(headerBuffer[index:], int64(len(entry.Value)))
+	index += binary.PutUvarint(headerBuffer[index:], uint64(len(entry.Key)))
+	index += binary.PutUvarint(headerBuffer[index:], uint64(len(entry.Value)))
 
 	headerSize := index
 	entrySize := headerSize + len(entry.Key) + len(entry.Value)
@@ -51,7 +51,7 @@ func EncodeEntry(entry *Entry) ([]byte, int) {
 
 	// copy the header
 	copy(entryBuffer[:headerSize], headerBuffer[:headerSize])
-	index += headerSize
+	index = headerSize
 	// copy the key and value
 	copy(entryBuffer[index:], entry.Key)
 	index += len(entry.Key)
@@ -70,15 +70,12 @@ func DecodeEntry(buffer []byte) (*Entry, error) {
 	}
 
 	header, index := DecodeEntryHeader(buffer)
-	keySize, n := binary.Varint(buffer[index:])
-	index += n
-	valueSize, n := binary.Varint(buffer[index:])
-	index += n
+	headerSize := index
 
 	// read key and value from buffer
-	key := buffer[index : index+int(keySize)]
-	index += int(keySize)
-	value := buffer[index : index+int(valueSize)]
+	key := buffer[index : index+int(header.KeySize)]
+	index += int(header.KeySize)
+	value := buffer[index : index+int(header.ValueSize)]
 	entry := &Entry{
 		Type:  header.Type,
 		Key:   key,
@@ -86,7 +83,7 @@ func DecodeEntry(buffer []byte) (*Entry, error) {
 	}
 
 	// verify the crc
-	if !verifyHeaderCRC(entry, buffer, header.CRC) {
+	if !verifyHeaderCRC(entry, buffer[0:headerSize], header.CRC) {
 		return nil, ErrInvalidCRC
 	}
 
@@ -106,10 +103,10 @@ func DecodeEntryHeader(buffer []byte) (*EntryHeader, int) {
 	index++
 
 	// read key size and value size
-	keySize, n := binary.Varint(buffer[index:])
+	keySize, n := binary.Uvarint(buffer[index:])
 	header.KeySize = uint32(keySize)
 	index += n
-	valueSize, n := binary.Varint(buffer[index:])
+	valueSize, n := binary.Uvarint(buffer[index:])
 	header.ValueSize = uint32(valueSize)
 	index += n
 
