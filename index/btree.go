@@ -60,6 +60,9 @@ func (bt *bTree) Delete(key []byte) *Index {
 
 	searchItem := &Item{key: key}
 	oldItem := bt.tree.Delete(searchItem)
+	if oldItem == nil {
+		return nil
+	}
 
 	return oldItem.(*Item).index
 }

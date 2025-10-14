@@ -72,17 +72,17 @@ func OpenDB(config config.DBConfig) (*DB, error) {
 	}
 
 	// load merged files
-	if err := instance.loadMergeFiles(); err != nil {
+	if err = instance.loadMergeFiles(); err != nil {
 		return nil, err
 	}
 
 	// load hint file
-	if err := instance.loadIndexesFromHintFile(); err != nil {
+	if err = instance.loadIndexesFromHintFile(); err != nil {
 		return nil, err
 	}
 
 	// Load existing data files
-	if err := instance.loadDataFiles(); err != nil {
+	if err = instance.loadDataFiles(); err != nil {
 		return nil, err
 	}
 
@@ -462,6 +462,8 @@ func (db *DB) Close() error {
 	if db.activeFile == nil {
 		return nil
 	}
+
+	log.Printf("Syncing Active File ID: %s", db.activeFile.ID)
 
 	if err := db.Sync(); err != nil {
 		return err

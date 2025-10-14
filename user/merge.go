@@ -7,10 +7,11 @@ import (
 	"kv_store/index"
 	"kv_store/transaction"
 	"kv_store/utils"
+	"log"
 	"os"
 	"path"
-	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -132,13 +133,26 @@ func (db *DB) Merge() error {
 		return err
 	}
 
+	// Close hint file to release file handle
+	if err = hintFile.Close(); err != nil {
+		return err
+	}
+
+	// Close finished file to release file handle
+	if err = finishedFile.Close(); err != nil {
+		return err
+	}
+
+	// Close merge DB to release all file handles
+	if err = mergeDB.Close(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (db *DB) getMergeDir() string {
-	rootDir := path.Dir(db.config.DataDirPath)
-	dbDir := path.Dir(db.config.DataDirPath)
-	margePath := filepath.Join(rootDir, dbDir+mergeDirName)
+	margePath := path.Join(db.config.DataDirPath, mergeDirName)
 	return margePath
 }
 
@@ -210,25 +224,38 @@ func (db *DB) loadMergeFiles() error {
 	}
 
 	firstNonMergeFileID, err := db.getFirstNonMergedFileID(mergeDir)
+	log.Printf("First Non-Merged File ID: %s", firstNonMergeFileID)
+	// find the first non merge file in the dir
+	firstNonMergeFileInfo, err := os.Stat(path.Join(db.config.DataDirPath, firstNonMergeFileID+data.FileSuffix))
 	if err != nil {
 		return err
 	}
-	firstNonMergedFile := db.oldFiles[firstNonMergeFileID]
-	if firstNonMergedFile == nil {
-		return kv_store.ErrLastNonMergedFileNotFound
-	}
-	maxTimestamp := db.oldFiles[firstNonMergeFileID].Timestamp
+	var maxTimestamp int64
+	maxTimestamp = firstNonMergeFileInfo.ModTime().Unix()
 
 	// replace data files in the db with data files in the merge data dir
 	// get data files in the db
 	originalDataFiles, err := os.ReadDir(db.config.DataDirPath)
 	// remove previous data files, remove files before the first non merged file
 	for _, dataFile := range originalDataFiles {
-		if dataFile.Name() == firstNonMergeFileID {
-			break
+		if dataFile.IsDir() {
+			continue
 		}
-		dataFilePath := path.Join(db.config.DataDirPath, dataFile.Name())
-		err = os.Remove(dataFilePath)
+		if !strings.HasSuffix(dataFile.Name(), data.FileSuffix) {
+			continue
+		}
+		info, err := dataFile.Info()
+		if err != nil {
+			return err
+		}
+		// only remove the data files before the first non-merged file
+		if info.ModTime().Unix() < maxTimestamp {
+			dataFilePath := path.Join(db.config.DataDirPath, dataFile.Name())
+			if err = os.Remove(dataFilePath); err != nil {
+				return err
+			}
+
+		}
 	}
 
 	// put the merge file into the db data dir
@@ -236,6 +263,11 @@ func (db *DB) loadMergeFiles() error {
 	// we need to modify the mod time of the merged files manually
 	// to make sure that the mod time them is less than the timestamp of the first non-merged file
 	for _, file := range files {
+		// skip the file lock file
+		if file.Name() == fileLockFileName {
+			continue
+		}
+
 		// move the file into the db data dir
 		oldPath := path.Join(mergeDir, file.Name())
 		newPath := path.Join(db.config.DataDirPath, file.Name())
@@ -260,6 +292,8 @@ func (db *DB) getFirstNonMergedFileID(dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer file.Close()
+
 	entry, _, err := file.Read(0)
 	if err != nil {
 		return "", err
@@ -269,16 +303,18 @@ func (db *DB) getFirstNonMergedFileID(dir string) (string, error) {
 }
 
 func (db *DB) loadIndexesFromHintFile() error {
-	dir := db.getMergeDir()
-	hintFilePath := path.Join(dir, data.HintFileName)
+	hintFilePath := path.Join(db.config.DataDirPath, data.HintFileName)
 	if _, err := os.Stat(hintFilePath); os.IsNotExist(err) {
 		return nil
 	}
 
-	hintFile, err := data.LoadHintFile(dir)
+	hintFile, err := data.LoadHintFile(db.config.DataDirPath)
 	if err != nil {
 		return err
 	}
+	defer func(hintFile *data.File) {
+		_ = hintFile.Close()
+	}(hintFile)
 
 	var offset int64 = 0
 	for {
